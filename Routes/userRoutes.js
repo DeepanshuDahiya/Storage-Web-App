@@ -1,10 +1,7 @@
 import express from "express";
-import usersJson from "../userDB.json" with { type: "json" };
-import foldersJson from "../folderDB.json" with { type: "json" };
 import fs from "node:fs/promises";
-
-let usersData = [...usersJson];
-let foldersData = [...foldersJson];
+import { ObjectId } from "mongodb";
+import { client } from "../config/db.js";
 
 const router = express.Router();
 
@@ -12,61 +9,79 @@ router.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password)
     return res.status(500).json({ message: "All input fields are required" });
-  const existingUser = usersData.findIndex((user) => user.email === email);
-  if (existingUser !== -1)
-    return res.status(400).json({
-      message: "User with this Email already exists",
-    });
 
-  const userId = crypto.randomUUID();
+  const users = req.db.collection("users");
+  const folders = req.db.collection("folders");
 
-  const dirId = crypto.randomUUID();
-
+  const existingUser = await users.findOne({ email: email });
+  if (existingUser) {
+    return res
+      .status(400)
+      .json({ error: "User with this Email already exists." });
+  }
+  const session = client.startSession();
   try {
-    foldersData.push({
-      id: dirId,
-      name: `root-${email}`,
-      parentDirId: null,
-      userId,
-      files: [],
-      folders: [],
-    });
+    const rootDir = new ObjectId();
+    const userId = new ObjectId();
 
-    usersData.push({
-      id: userId,
-      name,
-      email,
-      password,
-      rootDir: dirId,
-    });
-    await fs.writeFile("./userDB.json", JSON.stringify(usersData, null, 2));
-    await fs.writeFile("./folderDB.json", JSON.stringify(foldersData, null, 2));
-    return res.status(200).json({
-      message: "User created",
-      user: {
-        id: userId,
+    session.startTransaction();
+
+    await folders.insertOne(
+      {
+        _id: rootDir,
+        name: `User-${email}`,
+        parentDirId: null,
+        userId,
+        files: [],
+        folders: [],
+      },
+      { session },
+    );
+
+    await users.insertOne(
+      {
+        _id: userId,
         name,
         email,
+        password,
+        rootDir,
       },
+      { session },
+    );
+
+    await session.commitTransaction();
+
+    return res.status(201).json({
+      message: "User registered successfully",
+      userId,
+      rootDir,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    session.abortTransaction();
+    return res.status(400).json({ error: error.message });
   }
 });
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(500).json({ message: "All input fields are required" });
+  if (!email || !password)
+    return res.status(500).json({ error: "All input fields are required" });
+
+  const users = req.db.collection("users");
+  const folders = req.db.collection("folders");
+
+  try {
+    const existingUser = await users.findOne({ email: email });
+    if (!existingUser || existingUser.password !== password) {
+      return res.status(400).json({ error: "Invalid Credentials" });
+    }
+    res.cookie("uid", existingUser._id.toString(), {
+      httpOnly: true,
+    });
+    return res.json({ user: existingUser });
+  } catch (error) {
+    return res.json({ error: error.message });
   }
-  const existingUser = usersData.find((user) => user.email === email);
-  if (!existingUser || existingUser.password !== password) {
-    return res.status(400).json({ message: "Invalid Credentials" });
-  }
-  res.cookie("uid", existingUser.id, {
-    httpOnly: true,
-  });
-  return res.json({ user: existingUser });
 });
 
 router.post("/logout", (req, res) => {

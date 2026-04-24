@@ -1,15 +1,21 @@
-import userData from "../userDB.json" with { type: "json" };
+import { ObjectId } from "mongodb";
 
-export default function checkAuth(req, res, next) {
+export default async function checkAuth(req, res, next) {
   const { uid } = req.cookies;
   if (!uid) {
-    res.status(401).json({ cookie: `${uid}` });
+    return res.status(401).json({ error: "User not logged in" });
   }
-  const user = userData.find((user) => user.id === uid);
 
-  if (!user) {
-    res.status(401).json({ message: "user not found" });
+  try {
+    const users = req.db.collection("users");
+    const user = await users.findOne({ _id: new ObjectId(uid) });
+
+    if (!user) {
+      return res.status(401).json({ error: "user not found" });
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
   }
-  req.user = user;
-  next();
 }

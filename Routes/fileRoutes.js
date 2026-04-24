@@ -3,9 +3,8 @@ import fs, { writeFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { baseDir } from "../app.js";
-import filesData from "../filesDB.json" with { type: "json" };
-import foldersData from "../folderDB.json" with { type: "json" };
 import idValidation from "../Middlewares/idValidationMiddleware.js";
+import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
@@ -26,60 +25,80 @@ router.param("parentDirId", idValidation);
 
 // upload file
 router.post("{/:parentDirId}", async (req, res) => {
-  const { uid } = req.cookies;
+  const { uid: userId } = req.cookies;
+  const uid = new ObjectId(userId);
   const user = req.user;
+
   try {
-    let parentDirId = req.params.parentDirId || user.rootDir;
+    let parentDirId = req.params.parentDirId
+      ? new ObjectId(req.params.parentDirId)
+      : user.rootDir;
+
     const { filename } = req.headers;
 
-    const id = crypto.randomUUID();
+    const files = req.db.collection("files");
+    const folders = req.db.collection("folders");
+
     const extension = path.extname(filename);
-    const fullPath = resolveSafePath(`${id}${extension}`);
 
+    const fileResult = await files.insertOne({
+      name: String(filename),
+      extension,
+      parentDirId,
+      userId: uid,
+    });
+    const fileId = fileResult.insertedId;
+
+    const fullPath = resolveSafePath(`${fileId}${extension}`);
     const writeStream = createWriteStream(fullPath);
-
     req.pipe(writeStream);
 
     writeStream.on("finish", async () => {
-      filesData.push({
-        id,
-        name: String(filename),
-        extension,
-        parentDirId,
-        userId: uid,
-      });
-      const parentDir = foldersData.find((folder) => folder.id === parentDirId);
-      parentDir.files.push(id);
-      await writeFile("./filesDB.json", JSON.stringify(filesData, null, 2));
-      await writeFile("./folderDB.json", JSON.stringify(foldersData, null, 2));
-      return res.send("File uploaded successfully");
+      const parentFolder = await folders.updateOne(
+        { _id: new ObjectId(parentDirId) },
+        {
+          $push: {
+            files: fileId,
+          },
+        },
+      );
+      return res.json({ message: "File Uploaded successfully" });
     });
 
-    writeStream.on("error", () => {
-      return res.status(500).send("Upload failed");
+    writeStream.on("error", async () => {
+      // ❗ 1. delete file (if partially created)
+      fs.unlink(filePath, () => {});
+
+      // ❗ 2. delete DB entry
+      await files.deleteOne({ _id: fileId });
+      return res.status(500).json({ error: "Upload failed" });
     });
 
     req.on("error", () => {
-      return res.status(500).send("Request error");
+      return res.status(500).json({ error: "Request error" });
     });
   } catch (err) {
-    return res.status(403).send(err.message);
+    return res.status(403).json({ error: err.message });
   }
 });
 
 // get files content
-router.get("/:id", (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
     let { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid file id" });
+    }
+    const { uid: userId } = req.cookies;
+    const uid = new ObjectId(userId);
 
-    const { uid } = req.cookies;
-
-    const file = filesData.find((file) => file.id === id);
+    const files = req.db.collection("files");
+    const file = await files.findOne({ _id: new ObjectId(id) });
 
     if (!file) {
-      return res.status(404).json({ message: "File not found" });
-    } else if (file.userId !== uid) {
-      return res.status(403).json({ message: "Access Forbidden" });
+      return res.status(404).json({ error: "File not found" });
+    } else if (!file.userId.equals(uid)) {
+      return res.status(403).json({ error: "Access Forbidden" });
     }
 
     const extension = file.extension;
@@ -95,38 +114,50 @@ router.get("/:id", (req, res) => {
     return res.sendFile(fullPath, (err) => {
       if (err) {
         if (!res.headersSent) {
-          return res.status(404).json({ message: "File not found" });
+          return res.status(404).json({ error: "File not found" });
         }
       }
     });
   } catch (err) {
-    res.status(403).send(err.message);
+    res.status(403).json({ error: err.message });
   }
 });
 
 // rename file
 router.patch("/:id", async (req, res) => {
+  let { id } = req.params;
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).json({ error: "Invalid file id" });
+  }
+  let newFilename = req.body.newFilename || "Untitled";
+
+  const { uid: userId } = req.cookies;
+  const uid = new ObjectId(userId);
+
+  const files = req.db.collection("files");
+  const file = await files.findOne({ _id: new ObjectId(id) });
+
+  if (!file) {
+    return res.status(404).send("File not found");
+  } else if (!file.userId.equals(uid)) {
+    return res.status(403).json({ error: "Access Forbidden" });
+  }
+
   try {
-    let { id } = req.params;
-    let newFilename = req.body.newFilename || "Untitled";
-
-    const { uid } = req.cookies;
-
-    const file = filesData.find((f) => f.id === id);
-
-    if (!file) {
-      return res.status(404).send("File not found");
-    } else if (uid !== file.userId) {
-      return res.status(403).json({ message: "Access Forbidden" });
+    const result = await files.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          name: `${newFilename}${file.extension}`,
+        },
+      },
+    );
+    if (result.modifiedCount === 0) {
+      return res.status(400).json({ message: "No changes made" });
     }
-
-    file.name = String(newFilename);
-
-    await writeFile("./filesDB.json", JSON.stringify(filesData, null, 2));
-
-    return res.send("Name Updated");
+    return res.json({ message: "Name Updated" });
   } catch (err) {
-    res.status(403).send(err.message);
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -134,35 +165,41 @@ router.patch("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     let { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid file id" });
+    }
+    const { uid: userId } = req.cookies;
+    const uid = new ObjectId(userId);
 
-    const { uid } = req.cookies;
-
-    const file = filesData.find((file) => file.id === id);
+    const folders = req.db.collection("folders");
+    const files = req.db.collection("files");
+    const file = await files.findOne({ _id: new ObjectId(id) });
 
     if (!file) {
       return res.status(404).send("File not found");
-    } else if (uid !== file.userId) {
-      return res.status(403).json({ message: "Access Forbidden" });
+    } else if (!file.userId.equals(uid)) {
+      return res.status(403).json({ error: "Access Forbidden" });
     }
 
     const extension = file.extension;
-
     const fullPath = resolveSafePath(`${id}${extension}`);
+    const parentDirId = file.parentDirId;
 
-    await fs.rm(fullPath, { recursive: true });
+    await fs.rm(fullPath, { force: true });
 
-    const remFiles = filesData.filter((file) => file.id !== id);
-    const parentDirData = foldersData.find(
-      (folder) => folder.id === file.parentDirId,
+    const fileResult = await files.deleteOne({ _id: new ObjectId(id) });
+    const folderResult = await folders.updateOne(
+      { _id: new ObjectId(parentDirId) },
+      {
+        $pull: {
+          files: new ObjectId(id),
+        },
+      },
     );
-    parentDirData.files = parentDirData.files.filter(
-      (fileId) => fileId !== file.id,
-    );
-    await writeFile("./filesDB.json", JSON.stringify(remFiles, null, 2));
-    await writeFile("./folderDB.json", JSON.stringify(foldersData, null, 2));
-    res.send("Deleted");
+
+    return res.json({ message: "File Deleted" });
   } catch (err) {
-    res.status(403).send(err.message);
+    return res.status(500).json({ error: err.message });
   }
 });
 
