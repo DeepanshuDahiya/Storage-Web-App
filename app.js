@@ -36,7 +36,8 @@ try {
   app.use("/users", userRoutes);
 
   app.use((err, req, res, next) => {
-    return res.status(500).json({ message: err.message });
+    console.log(err);
+    return res.status(500).json({ error: err.message });
   });
 
   app.listen(4000, () => {

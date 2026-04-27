@@ -1,4 +1,5 @@
-import { client, connectDB } from "./db.js";
+import { connectDB } from "./db.js";
+import mongoose from "mongoose";
 
 const db = await connectDB();
 
@@ -101,5 +102,5 @@ try {
 } catch (error) {
   console.log(error.message);
 } finally {
-  await client.close();
+  await mongoose.close();
 }
