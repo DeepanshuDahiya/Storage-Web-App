@@ -56,7 +56,7 @@ export const uploadFile = async (req, res) => {
 
     writeStream.on("error", async () => {
       // ❗ 1. delete file (if partially created)
-      fs.unlink(filePath, () => {});
+      fs.unlink(fullPath, () => {});
 
       // ❗ 2. delete DB entry
       await files.deleteOne({ _id: fileId });
