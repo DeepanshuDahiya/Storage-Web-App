@@ -38,7 +38,7 @@ export const uploadFile = async (req, res) => {
 
     const fileId = result.insertedId;
     const fullPath = resolveSafePath(`${fileId}${extension}`);
-    const writeStream = fs.createWriteStream(fullPath);
+    const writeStream = createWriteStream(fullPath);
 
     req.pipe(writeStream);
 
