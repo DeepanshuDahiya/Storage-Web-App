@@ -42,8 +42,8 @@ try {
     return res.status(500).json({ error: err.message });
   });
 
-  app.listen(4000, () => {
-    console.log("listening on port 4000");
+  app.listen(process.env.PORT || 4000, () => {
+    console.log(`listening on port ${process.env.PORT || 4000}`);
   });
 } catch (error) {
   console.log("Error in DB connection");
