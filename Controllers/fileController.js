@@ -44,7 +44,7 @@ export const uploadFile = async (req, res) => {
 
     writeStream.on("finish", async () => {
       const parentFolder = await folders.updateOne(
-        { _id: new ObjectId(parentDirId) },
+        { _id: parentDirId },
         {
           $push: {
             files: fileId,
