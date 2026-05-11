@@ -26,16 +26,37 @@ try {
     req.db = db;
     next();
   });
+  // app.use(
+  //   cors({
+  //     origin: [
+  //       "http://localhost:5173",
+  //       "storage-web-app-frontend.vercel.app",
+  //       "storage-web-app-frontend-ss-projects-27de03c3.vercel.app",
+  //     ],
+  //     credentials: true,
+  //   }),
+  // );
+  const allowedOrigins = [
+    "http://localhost:5173",
+    "https://storage-web-app-frontend.vercel.app",
+  ];
+
   app.use(
     cors({
-      origin: [
-        "http://localhost:5173",
-        "storage-web-app-frontend.vercel.app",
-        "storage-web-app-frontend-ss-projects-27de03c3.vercel.app",
-      ],
+      origin(origin, callback) {
+        // Allow requests with no Origin header (e.g., Postman)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+
+        return callback(new Error(`Origin not allowed by CORS: ${origin}`));
+      },
       credentials: true,
     }),
   );
+
   app.use(express.json());
   app.use(cookieParser());
 
