@@ -20,6 +20,8 @@ try {
   const db = await connectDB();
   const app = express();
 
+  app.set("trust proxy", 1);
+
   app.use((req, res, next) => {
     req.db = db;
     next();
@@ -28,8 +30,8 @@ try {
     cors({
       origin: [
         "http://localhost:5173",
-        "storage-web-app-frontend-ss-projects-27de03c3.vercel.app",
         "storage-web-app-frontend.vercel.app",
+        "storage-web-app-frontend-ss-projects-27de03c3.vercel.app",
       ],
       credentials: true,
     }),
