@@ -124,7 +124,6 @@ export const deleteDir = async (req, res) => {
     await delDir(id, folders, files);
     return res.json({ message: "Folder Deleted Successfully" });
   } catch (error) {
-    console.error(error);
     return res.status(500).json({ error: error.message });
   }
 };

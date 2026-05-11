@@ -70,7 +70,7 @@ export const loginUser = async (req, res) => {
       return res.status(400).json({ error: "Invalid Credentials" });
     }
     // Hashing the cookie
-    const idHash = crypto
+    const idHash = await crypto
       .createHash("sha256")
       .update(existingUser._id.toString())
       .update("secret-hashing-key")
@@ -99,7 +99,6 @@ export const logoutUser = (req, res) => {
 
 export const isLogin = async (req, res) => {
   try {
-    console.log(req.userId);
     const user = await users.findById(req.userId).select("-password");
 
     if (!user) {

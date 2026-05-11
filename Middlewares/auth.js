@@ -11,14 +11,13 @@ export default async function checkAuth(req, res, next) {
 
   const userId = uid.slice(0, 24).trim();
   const hash = uid.slice(24);
+  const calculatedHash = await crypto
+    .createHash("sha256")
+    .update(userId)
+    .update("secret-hashing-key")
+    .digest("base64url");
 
-  if (
-    crypto
-      .createHash("sha256")
-      .update(userId)
-      .update("secret-hashing-key")
-      .digest("base64url") !== hash
-  ) {
+  if (calculatedHash !== hash) {
     res.clearCookie("uid", {
       httpOnly: true,
       secure: true,
@@ -30,7 +29,7 @@ export default async function checkAuth(req, res, next) {
     const user = await users.findOne({
       _id: new ObjectId(`${userId}`),
     });
-    console.log(`${userId}`);
+
     if (!user) {
       return res.status(401).json({ error: "user not found" });
     }

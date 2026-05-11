@@ -67,7 +67,6 @@ export const uploadFile = async (req, res) => {
       return res.status(500).json({ error: "Request error" });
     });
   } catch (err) {
-    console.error("UPLOAD ERROR:", err); // 👈 log actual error
     return res.status(500).json({ error: err.message || err });
   }
 };
@@ -112,7 +111,6 @@ export const getFile = async (req, res) => {
 };
 
 export const renameFile = async (req, res) => {
-
   const user = req.user;
 
   let { id } = req.params;
@@ -154,8 +152,8 @@ export const deleteFile = async (req, res) => {
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({ error: "Invalid file id" });
     }
-    
-    const user = req.user
+
+    const user = req.user;
 
     const file = await files.findOne({ _id: new ObjectId(id) });
 
