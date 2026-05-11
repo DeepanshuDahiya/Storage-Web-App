@@ -21,6 +21,7 @@ export default async function checkAuth(req, res, next) {
   ) {
     res.clearCookie("uid", {
       httpOnly: true,
+      secure: true,
     });
     return res.status(500).json({ error: "User not logged in" });
   }
