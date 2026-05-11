@@ -22,52 +22,81 @@ export const uploadFile = async (req, res) => {
   const user = req.user;
 
   try {
-    let parentDirId = req.params.parentDirId
+    const parentDirId = req.params.parentDirId
       ? new ObjectId(req.params.parentDirId)
       : user.rootDir;
 
-    const { filename } = req.headers;
-
+    const filename = String(req.headers.filename || "file");
     const extension = path.extname(filename);
 
-    const fileResult = await files.insertOne({
-      name: String(filename),
+    const result = await files.insertOne({
+      name: filename,
       extension,
       parentDirId,
       userId: user._id,
     });
-    const fileId = fileResult._id;
 
+    const fileId = result.insertedId;
     const fullPath = resolveSafePath(`${fileId}${extension}`);
-    const writeStream = createWriteStream(fullPath);
+    const writeStream = fs.createWriteStream(fullPath);
+
     req.pipe(writeStream);
 
     writeStream.on("finish", async () => {
-      const parentFolder = await folders.updateOne(
-        { _id: parentDirId },
-        {
-          $push: {
-            files: fileId,
+      try {
+        await folders.updateOne(
+          { _id: parentDirId },
+          {
+            $push: {
+              files: fileId,
+            },
           },
-        },
-      );
-      return res.json({ message: "File Uploaded successfully" });
+        );
+
+        if (!res.headersSent) {
+          res.status(200).json({
+            message: "File uploaded successfully",
+          });
+        }
+      } catch (error) {
+        fs.unlink(fullPath, () => {});
+        await files.deleteOne({ _id: fileId });
+
+        if (!res.headersSent) {
+          res.status(500).json({
+            error: error.message,
+          });
+        }
+      }
     });
 
     writeStream.on("error", async () => {
-      // ❗ 1. delete file (if partially created)
       fs.unlink(fullPath, () => {});
-
-      // ❗ 2. delete DB entry
       await files.deleteOne({ _id: fileId });
-      return res.status(500).json({ error: "Upload failed" });
+
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Upload failed",
+        });
+      }
     });
 
-    req.on("error", () => {
-      return res.status(500).json({ error: "Request error" });
+    req.on("error", async () => {
+      fs.unlink(fullPath, () => {});
+      await files.deleteOne({ _id: fileId });
+
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Request error",
+        });
+      }
     });
-  } catch (err) {
-    return res.status(500).json({ error: err.message || err });
+  } catch (error) {
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: error.message,
+      });
+    }
   }
 };
 
