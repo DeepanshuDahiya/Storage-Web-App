@@ -28,7 +28,7 @@ try {
     cors({
       origin: [
         "http://localhost:5173",
-        "storage-web-app-frontend-i7p60x96l-ss-projects-27de03c3.vercel.app",
+        "storage-web-app-frontend-ss-projects-27de03c3.vercel.app",
         "storage-web-app-frontend.vercel.app",
       ],
       credentials: true,
