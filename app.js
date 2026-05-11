@@ -8,6 +8,8 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import checkAuth from "./Middlewares/auth.js";
 import { connectDB } from "./config/db.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
