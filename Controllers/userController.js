@@ -81,6 +81,7 @@ export const loginUser = async (req, res) => {
     res.cookie("uid", signedCookie, {
       httpOnly: true,
       secure: true,
+      sameSite: "none",
     });
     return res.json({ user: existingUser });
   } catch (error) {
@@ -92,6 +93,7 @@ export const logoutUser = (req, res) => {
   res.clearCookie("uid", {
     httpOnly: true,
     secure: true,
+    sameSite: "none",
   });
 
   res.json({ message: "Logged out" });
