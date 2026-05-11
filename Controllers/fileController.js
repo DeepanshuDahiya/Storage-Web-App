@@ -36,8 +36,9 @@ export const uploadFile = async (req, res) => {
       userId: user._id,
     });
 
-    const fileId = result.insertedId;
-    const fullPath = resolveSafePath(`${fileId}${extension}`);
+    const fileId = result._id;
+
+    const fullPath = resolveSafePath(`${fileId.toString()}${extension}`);
     const writeStream = createWriteStream(fullPath);
 
     req.pipe(writeStream);
@@ -71,7 +72,7 @@ export const uploadFile = async (req, res) => {
     });
 
     writeStream.on("error", async () => {
-      fs.unlink(fullPath, () => {});
+      await fs.unlink(fullPath, () => {});
       await files.deleteOne({ _id: fileId });
 
       if (!res.headersSent) {
@@ -82,7 +83,7 @@ export const uploadFile = async (req, res) => {
     });
 
     req.on("error", async () => {
-      fs.unlink(fullPath, () => {});
+      await fs.unlink(fullPath, () => {});
       await files.deleteOne({ _id: fileId });
 
       if (!res.headersSent) {
@@ -171,6 +172,7 @@ export const renameFile = async (req, res) => {
     }
     return res.json({ message: "Name Updated" });
   } catch (err) {
+    console.log(err);
     return res.status(500).json({ error: err.message });
   }
 };
